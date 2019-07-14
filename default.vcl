@@ -4,12 +4,15 @@ import directors;
 
 # define backends
 backend gw1 {
-    .host = "10.65.59.40";
-    .port = "8084";
+    .host = "gw1.example.com";
+    .port = "8082";
+    .ssl = 1;				# Turn on SSL support
+	.ssl_sni = 1;			# Use SNI extension  (default: 1)
+	.ssl_verify_peer = 1;	# Verify the peer's certificate chain (default: 1)
+	.ssl_verify_host = 1;	# Verify the host name in the peer's certificate (default: 0)
     .probe = {
         .request = 
           "OPTIONS / HTTP/1.1"
-          "Host: localhost"
           "Connection: close"
           "User-Agent: Varnish Health Probe";
 
@@ -22,17 +25,20 @@ backend gw1 {
     .connect_timeout = 60s;
 }
 backend gw2 {
-    .host = "10.65.59.41";
-    .port = "8084";
+    .host = "gw2.example.com";
+    .port = "802";
+    .ssl = 1;				# Turn on SSL support
+	.ssl_sni = 1;			# Use SNI extension  (default: 1)
+	.ssl_verify_peer = 1;	# Verify the peer's certificate chain (default: 1)
+	.ssl_verify_host = 1;	# Verify the host name in the peer's certificate (default: 0)
     .probe = {
         .request = 
           "OPTIONS / HTTP/1.1"
-          "Host: localhost"
           "Connection: close"
           "User-Agent: Varnish Health Probe";
-          
+
         .timeout = 1s;
-        .interval = 60s;
+        .interval = 10s;
         .window = 5;
         .threshold = 3;
     }
@@ -44,17 +50,14 @@ backend gw2 {
 
 sub vcl_init {
     # create a director to loadbalance between available backends
-    new bar = directors.round_robin();
-    bar.add_backend(gw1);
-    bar.add_backend(gw2);
+    new director = directors.round_robin();
+    director.add_backend(gw1);
+    director.add_backend(gw2);
 }
 
 sub vcl_recv {
     # send all traffic to the bar director:
-    set req.backend_hint = bar.backend();
-
-    # TODO: handle server side encryption custom key headers
-    # TODO: handle if-* headers
+    set req.backend_hint = director.backend();
 
     # only process HTTP GET requests
     if (req.method == "GET") {
