@@ -1,153 +1,147 @@
+#
+# NetApp StorageGRID
+# v1.1
+#
+
 vcl 4.1;
-# load director support for loadbalancing
-import directors;
+
+import kvstore;
+import std;
+import urlplus;
+import utils;
+
 
 # define backends
-backend gw1 {
-    .host = "gw1.example.com";
+backend default {
+    .host = "s3.example.com";
     .port = "8082";
     .ssl = 1;				# Turn on SSL support
 	.ssl_sni = 1;			# Use SNI extension  (default: 1)
 	.ssl_verify_peer = 1;	# Verify the peer's certificate chain (default: 1)
 	.ssl_verify_host = 1;	# Verify the host name in the peer's certificate (default: 0)
-    .probe = {
-        .request = 
-          "OPTIONS / HTTP/1.1"
-          "Connection: close"
-          "User-Agent: Varnish Health Probe";
-
-        .timeout = 1s;
-        .interval = 10s;
-        .window = 5;
-        .threshold = 3;
-    }
-    .between_bytes_timeout = 0s;
-    .connect_timeout = 60s;
-}
-backend gw2 {
-    .host = "gw2.example.com";
-    .port = "802";
-    .ssl = 1;				# Turn on SSL support
-	.ssl_sni = 1;			# Use SNI extension  (default: 1)
-	.ssl_verify_peer = 1;	# Verify the peer's certificate chain (default: 1)
-	.ssl_verify_host = 1;	# Verify the host name in the peer's certificate (default: 0)
-    .probe = {
-        .request = 
-          "OPTIONS / HTTP/1.1"
-          "Connection: close"
-          "User-Agent: Varnish Health Probe";
-
-        .timeout = 1s;
-        .interval = 10s;
-        .window = 5;
-        .threshold = 3;
-    }
-    .between_bytes_timeout = 0s;
-    .connect_timeout = 60s;
 }
 
 # custom VCL for handling S3 requests
 
 sub vcl_init {
-    # create a director to loadbalance between available backends
-    new director = directors.round_robin();
-    director.add_backend(gw1);
-    director.add_backend(gw2);
+    # initialize hit counter as normal cache hit counter does not work due to backend lookups for all requests
+    new hits = kvstore.init();
 }
 
-sub vcl_recv {
-    # send all traffic to the bar director:
-    set req.backend_hint = director.backend();
+sub vcl_recv
+{
+    # Backend selection
+    set req.backend_hint = default;
 
-    # only process HTTP GET requests
+    # Only cache GET requests
     if (req.method == "GET") {
-        # we need to treat range reads specially as the range may be a signed header by the client and varnish is not yet optimized for storing and combining range read responses
+        # Save the range
         if (req.http.Range) {
             set req.http.x-range = req.http.Range;
+            unset req.http.Range;
         }
-
-        if (req.restarts == 0) {
-            # first check if the requested object is in the cache
-            set req.http.x-state = "cache_check";
-            return (hash);
-        } else if (req.http.x-state == "backend_check") {
-            # if object is cached, we still need to send the request to the backend for authentication
-            return (pass);
-        } else {
-            # return the object
-            return (hash);
-        }
+        return (hash);
     } else {
-        # bypass varnish for all other HTTP methods (e.g. PUT, DELETE, HEAD)
-        return (pipe);
+        return (pass);
     }
 }
 
-sub vcl_hash {
-    # if it is a range request, add range to lookup
+sub vcl_hash
+{
+    # Range fragment caching
     if (req.http.x-range) {
         hash_data(req.http.x-range);
-        unset req.http.Range;
     }
-    # query parameters need to be removed to allow direct retrieval of the object from the cache
-    hash_data(regsub(req.url, "\?.*$", ""));
+
+    # Strip query params
+    hash_data(urlplus.url_get());
+
+    # Hash on host
     if (req.http.host) {
         hash_data(req.http.host);
     } else {
         hash_data(server.ip);
     }
+
     return (lookup);
 }
 
-sub vcl_hit {
-	if (req.http.x-state == "cache_check" && obj.http.etag) {
-		set req.http.x-state = "backend_check";
-		set req.http.etag = obj.http.etag;
-		return (restart);
-	} else {
-		return (deliver);
-	}
+sub vcl_hit
+{
+    return (pass);
 }
 
-sub vcl_backend_fetch {
-    # if it is a range request, add the range header back
+sub vcl_backend_fetch
+{
+    # Restore the range
     if (bereq.http.x-range) {
         set bereq.http.Range = bereq.http.x-range;
+        unset bereq.http.x-range;
     }
-
-	if (bereq.http.x-state == "backend_check") {
-        # use if-none-match header to ask S3 if the ETag of the cached object is the one being requested
-        set bereq.http.if-none-match = bereq.http.etag;
-	}
 }
 
-sub vcl_backend_response {
-    # only cache responses which have an ETag (e.g. object retrieval and not bucket listing)
-    if (beresp.http.etag) {
-        if (bereq.http.x-range && beresp.status == 206) {
-            set beresp.http.x-content-range = beresp.http.content-range;
-        }
+sub vcl_backend_response
+{
+    # Errors
+    if (beresp.status >= 400 && beresp.status != 404) {
+	return (error(beresp.status, beresp.reason));
+    }
 
-        if (bereq.http.etag && bereq.http.etag != beresp.http.etag) {
-            ban("obj.http.etag == " + bereq.http.etag);
-        }
-        # as we validate the cache on every request, we can cache the file forever
-        set beresp.ttl = 100y;
-    } else {
+    # We do not have an actual object
+    if (!beresp.http.etag) {
         set beresp.uncacheable = true;
+        return (deliver);
     }
+
+    # Calculate a hit counter
+    if (beresp.was_304) {
+        hits.counter(urlplus.url_get(), 1);
+    } else {
+        hits.delete(urlplus.url_get());
+    }
+
+    # Workaround to allow 206 responses to be ETagged in future requests
+    unset beresp.http.X-206;
+    if (beresp.status == 206) {
+        set beresp.http.X-206 = "true";
+        set beresp.status = 200;
+        if (beresp.http.Content-Range) {
+            set beresp.http.x-content-range = beresp.http.Content-Range;
+            unset beresp.http.Content-Range;
+        }
+    }
+
+    # TTL
+    set beresp.ttl = 0.000001s;
+    set beresp.grace = 0s;
+    set beresp.keep = 10y;
+
+    utils.fast_304();
+
+    return (deliver);
 }
 
-sub vcl_deliver {
+sub vcl_backend_error
+{
+    set beresp.ttl = 0s;
+    set beresp.grace = 0s;
+    set beresp.keep = 0s;
+    set beresp.uncacheable = true;
+    return (deliver);
+}
+
+sub vcl_deliver
+{
+    # Restore 206 response
+    if (resp.http.X-206 == "true") {
+        set resp.status = 206;
+        unset resp.http.X-206;
+    }
     if (resp.http.x-content-range) {
         set resp.http.Content-Range = resp.http.x-content-range;
         unset resp.http.x-content-range;
     }
 
-	if (req.http.x-state == "backend_check" && resp.status == 304) {
-		unset req.http.x-state;
-		return (restart);
-	} else {
-        unset req.http.x-state;
-    }
+    # Hits
+    set resp.http.x-hits = hits.counter(urlplus.url_get(), 0);
 }
