@@ -5,33 +5,42 @@
 
 vcl 4.1;
 
+import goto;
 import kvstore;
 import std;
 import urlplus;
 import utils;
 
+# define health check for S3 endpoint
+probe healthcheck { 
+    .request = 
+        "OPTIONS / HTTP/1.1"
+        "Connection: close"
+        "User-Agent: Varnish Health Probe";
+    .timeout = 1s;
+    .interval = 10s;
+    .window = 5;
+    .threshold = 3;
+}
 
-# define backends
 backend default {
-    .host = "s3.example.com";
-    .port = "8082";
-    .ssl = 1;				# Turn on SSL support
-	.ssl_sni = 1;			# Use SNI extension  (default: 1)
-	.ssl_verify_peer = 1;	# Verify the peer's certificate chain (default: 1)
-	.ssl_verify_host = 1;	# Verify the host name in the peer's certificate (default: 0)
+    .host = "10.65.59.40";
 }
 
 # custom VCL for handling S3 requests
 
 sub vcl_init {
+    # define S3 endpoint using Varnish GOTO director
+    new endpoint = goto.dns_director(s="https://s3.muccbc.hq.netapp.com:8082",probe=healthcheck);
+
     # initialize hit counter as normal cache hit counter does not work due to backend lookups for all requests
     new hits = kvstore.init();
 }
 
 sub vcl_recv
 {
-    # Backend selection
-    set req.backend_hint = default;
+    # send all traffic to the director
+    set req.backend_hint = endpoint.backend();
 
     # Only cache GET requests
     if (req.method == "GET") {
