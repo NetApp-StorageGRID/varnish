@@ -23,8 +23,10 @@ probe healthcheck {
     .threshold = 3;
 }
 
-backend default {
-    .host = "10.65.59.40";
+# Varnish requires a traditional backend so we need to define a dummy backend never to be used
+backend none {
+    .host = "0";
+    .port = "0";
 }
 
 # custom VCL for handling S3 requests
