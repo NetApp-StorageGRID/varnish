@@ -1,0 +1,27 @@
+version: '3.7'
+services:
+  varnish:
+    build: .
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - type: bind
+        source: /mnt/nvme0n1
+        target: /mnt/nvme0n1
+      - type: bind
+        source: /mnt/nvme0n2
+        target: /mnt/nvme0n2
+      - type: bind
+        source: /mnt/nvme0n3
+        target: /mnt/nvme0n3
+    deploy:
+      resources:
+        limits:
+          cpus: '32'
+          memory: 176gb
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
