@@ -21,11 +21,14 @@ For our proof of concept we deployed a single Varnish Enterprise instance (comme
 - Varnish Enterprise 6.0.3r9 – Commercial distribution
 
 StorageGRID Configuration
-•	StorageGRID 11.2.0.2
-•	6x Virtual Machine Storage Node, 4 x StorageGRID Appliance SG5612, 4 x Storage Node running on Docker
-•	Load balancer: Gateway node
+
+- StorageGRID 11.2.0.2
+- 6x Virtual Machine Storage Node, 4 x StorageGRID Appliance SG5612, 4 x Storage Node running on Docker
+- Load balancer: Gateway node
+
 WAN connection between Cache and S3 endpoint: 1GbE
-Load generator and testing: S3tester
+
+Load generator used for benchmarks testing: [S3tester 2.1.0](https://github.com/s3tester/s3tester)
 
 ###	Varnish Installation
 
