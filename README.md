@@ -79,7 +79,9 @@ frontend = {
     port = "443"
 ```
 
-6. Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate key, certificate and CA certificates with
+6.	If you encounter performance bottlenecks when using SSL, increasing the workers for hitch either via `/etc/hitch/hitch.conf` or via the command line parameter `--workers` usually helps
+
+7. Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate key, certificate and CA certificates with
 
 ```
 cat example.key example.crt ca.crt > example.pem
@@ -148,7 +150,7 @@ cat example.key example.crt ca.crt > example.pem
 
 Modify the `default.vcl` and `mse.conf` files according to your setup (see above). As a minimum, change the endpoint in the `vcl_init` section in `default.vcl` and provide directory and filename for the books in `mse.conf`. 
 
-Make sure that directories used in `mse.conf` are included in `docker-compose.yml` and that the resource limits for memory and CPUs can be provided by the docker host.
+Make sure that directories used in `mse.conf` are included in `docker-compose.yml` and that the resource limits for memory and CPUs can be provided by the docker host. You may also want to change the number of Hitch workers to be equal or lower than the number of CPU cores in `Dockerfile`.
 
 Then run the container using `docker-compose`. You may want to use the `--build` paramater to recreate the Docker image if you changed `default.vcl` or `mse.conf`.
 
