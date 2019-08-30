@@ -79,7 +79,7 @@ frontend = {
     port = "443"
 ```
 
-6. Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate them with
+6. Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate key, certificate and CA certificates with
 
 ```
 cat example.key example.crt ca.crt > example.pem
@@ -138,6 +138,12 @@ Create a RHEL/Centos yum repository file to access the Varnish Enterprise files 
 
 ```
 vi varnish-6.0-plus.repo
+```
+
+Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate key, certificate and CA certificates with
+
+```
+cat example.key example.crt ca.crt > example.pem
 ```
 
 Modify the `default.vcl` and `mse.conf` files according to your setup (see above). As a minimum, change the endpoint in the `vcl_init` section in `default.vcl` and provide directory and filename for the books in `mse.conf`.
