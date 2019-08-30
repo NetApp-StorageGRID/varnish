@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Varnish Cache is a web application accelerator. By placing Varnish in front of an application such as StorageGRID you can dramatically improve performance for objects that are repeatedly fetched.
+Varnish Cache is a web application accelerator. When you place Varnish Cache in front of an application such as NetApp StorageGRID, the performance of objects that are repeatedly fetched is dramatically improved.
 
-The initial fetch of an object from StorageGRID includes a small amount of latency that is inherent with object store architecture. With Varnish cache in front of StorageGRID all subsequent fetches of that object are served from Varnish cache with low latency and very high throughput.
+The initial fetch of an object from StorageGRID includes a small amount of latency that is inherent to object store architecture. With Varnish Cache in front of StorageGRID, all subsequent fetches of an object are served from Varnish Cache with low latency and high throughput.
 
 The solution is designed to be completely transparent to any client and ensures that for all requests authentication and authorization is checked.
 
@@ -12,18 +12,18 @@ The solution is designed to be completely transparent to any client and ensures 
 
 ## Varnish lab configuration
 
-For our proof of concept we deployed a single Varnish Enterprise instance (commercial distribution) on a bare metal server:
+For a proof of concept, we deployed a single Varnish Enterprise instance (commercial distribution) on a bare metal server:
 
 - OS: Centos 7.6 
 - 2 x 8 Core Intel(R) Xeon(R) CPU E5-2640 v2 @ 2.00GHz
 - 192 GB Memory
 - 8 x 512 GB NVMe disks
-- Varnish Enterprise 6.0.3r9 – Commercial distribution
+- Varnish Enterprise 6.0.4r1 (commercial distribution)
 
 StorageGRID Configuration
 
 - StorageGRID 11.2.0.2
-- 6x Virtual Machine Storage Node, 4 x StorageGRID Appliance SG5612, 4 x Storage Node running on Docker
+- 6x virtual machine storage node, 4 x StorageGRID appliance SG5612, 4 x bare metal storage node
 - Load balancer: Gateway node
 
 WAN connection between Cache and S3 endpoint: 1GbE
@@ -34,47 +34,44 @@ Load generator used for benchmarks testing: [S3tester 2.1.0](https://github.com/
 
 This solution was build and tested with Varnish Enterprise which is optimized for production usage and offers additional features relevant for this solution like the Varnish Massive Storage Engine (MSE) and SSL. MSE is optimized for caching using disk and memory.
 
-**Note:** The VCL requires at least Varnish Enterprise 6.0.3r9 as some required bug fixes and features are only available since that release.
+**Note:** The VCL requires at least Varnish Enterprise 6.0.4r1 as some required bug fixes and features are only available since that release.
 
 Follow the [installation steps provided by Varnish](https://docs.varnish-software.com/varnish-cache-plus/installation/) to install the software.
 
 ## Varnish Configuration
 
-After Varnish is installed, the default configuration file needs to be overwritten. 
+After you have installed Varnish, overwrite the default configuration file.
 
 ### Provide StorageGRID custom VCL
 
-Replace /etc/varnish/default.vcl with the StorageGRID VCL file by using the [default.vcl](default.vcl) file on GitHub as basis.
+To provide the StorageGRID custom VCL, complete the following steps:
 
-Customize the default.vcl to point to your grid
-
-- Provide the DNS name of your load balancer or Gateway node
-- Provide port
-  - 8082 is default for API Gateway Node HTTPS,
+1. Replace `/etc/varnish/default.vcl` with the StorageGRID VCL file. Use the [`default.vcl`](default.vcl) file on GitHub as a basis.
+2. Customize the default.vcl file to point to your grid:
+    1. Provide the DNS name of your load balancer or Gateway node.
+    2. Provide the port:
+        * 8082 is the default port for API Gateway Node HTTPS.
 
 ### Configure Massive Storage Engine (MSE)
 
-It is recommended to use memory and SSD or NVMe drives for caching for best performance. Follow the [steps provided by Varnish to configure MSE](https://docs.varnish-software.com/varnish-cache-plus/features/mse/). An example [mse.conf](mse.conf) file is provided on GitHub. Copy the mse.conf file /var/lib/mse/mse.conf and customize it for your environment.
+For best performance, NetApp recommends using memory and SSD or NVMe drives for caching. To configure the MSE, complete the following steps:
 
-**Note:** The parameter database_size should be configured to account for 100 Bytes per object cached.
+1. Follow the [steps provided by Varnish to configure MSE](https://docs.varnish-software.com/varnish-cache-plus/features/mse/). An example [`mse.conf`](mse.conf) file is provided on GitHub. 
+2. Copy the `mse.conf` file to `/var/lib/mse/mse.conf` and customize it for your environment.
 
-The database directory should be stored on low latency storage, otherwise it will negatively impact small object throughput.
-Ensure that you initialize your MSE configuration using
+**Note:** Note:	Configure the `database_size` parameter to account for 100 bytes per object cached. Store the database directory on low latency storage or it can negatively impact small object throughput.
 
-```
-mkfs.mse -f -c /var/lib/mse/mse.conf
-```
+3. Initialize your MSE configuration using `mkfs.mse -f -c /var/lib/mse/mse.conf`.
 
 ### Configure Hitch to use your SSL certificate
 
-Follow the steps provided by Varnish for [setting up Client SSL/TLS termination](https://docs.varnish-software.com/varnish-cache-plus/features/client-ssl/).
+To configure Hitch to use your SSL certificate, complete the following steps:
 
-Provide the SSL certificate that matches the DNS name of your StorageGRID S3 endpoint – typically VIP on load balancer or Gateway node.
-
-Copy your SSL certificate in PEM format to /etc/hitch
-Modify /etc/hitch/hitch.conf
-
-Set front end to desired port:
+1. Follow the steps provided by Varnish for [setting up Client SSL/TLS termination](https://docs.varnish-software.com/varnish-cache-plus/features/client-ssl/).
+2. Provide the SSL certificate that matches the DNS name of your StorageGRID S3 endpoint.
+3. Copy your SSL certificate in PEM format to `/etc/hitch`
+4. Modify `/etc/hitch/hitch.conf`
+5. Set front end to desired port:
 
 ```
 frontend = {
@@ -82,37 +79,40 @@ frontend = {
     port = "443"
 ```
 
-Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate them with
+6. Hitch requires a single file containing the concatenation of private key, certificate and CA certificate(s). From the certificate and private key used in StorageGRID for the Object Storage endpoint, you can concatenate them with
 
 ```
 cat example.key example.crt ca.crt > example.pem
 ```
 
-Make sure to either copy the file to the default location, which is /etc/hitch/testcert.pem or change the default location in /etc/hitch/hitch.conf to the match the location of the PEM file
+7. Make sure to either copy the file to the default location, which is `/etc/hitch/testcert.pem` or change the default location in `/etc/hitch/hitch.conf` to the match the location of the PEM file.
 
 ```
 pem-file = "/etc/hitch/example.pem"
 ```
 
-Ensure that the hitch service is started (refer to the documentation to persist service start at system startup)
-
-```
-service hitch start
-```
-
 ### Restart services and test
 
-Configure Varnish to listen on the port of your choice. StorageGRID defaults to 8082, many customers will choose to use the standard HTTPS port 443.
+To restart services and test, complete the following steps:
 
-Make sure to have the following settings included `vsl_mask=+Hash` and `http_gzip_support=off`. The first setting adds the hash to the logging to simplify debugging. The second disables gzip which would break S3 authentication if enabled. 
+1. Configure Varnish to listen on the port of your choice. Hitch requires Varnish to listen on port 8443 for the PROXY protocol, which can be achieved with the parameter `-a :8443,PROXY`. If HTTP access should be allowed, also use the parameter `-a :80`.
+2. Make sure that the following settings are included:
+```
+vsl_mask=+Hash
+http_gzip_support=off
+```
 
-This is an example of varnishd parameters
+The first setting adds the hash to the logging to simplify debugging. The second disables gzip which would break S3 authentication if enabled. 
+
+See the following example of Varnish parameters:
 
 ```
-/usr/sbin/varnishd -a :80 -a :8443 -s mse,/var/lib/mse/mse.conf -p vsl_mask=+Hash -p http_gzip_support=off -f /etc/varnish/default.vcl
+/usr/sbin/varnishd -F -a :80 -a :8443,PROXY -s mse,/var/lib/mse/mse.conf -p vsl_mask=+Hash -p http_gzip_support=off -f /etc/varnish/default.vcl
 ```
 
-Restart the varnish service. At this point you should be able to fetch an object from StorageGRID through varnish via AWS CLI or similar client.
+3. Start or restart the Varnish and Hitch services.
+
+Now you can fetch an object from StorageGRID through Varnish by using any S3 client.
 
 ## Docker deployment
 
