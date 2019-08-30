@@ -146,7 +146,7 @@ Hitch requires a single file containing the concatenation of private key, certif
 cat example.key example.crt ca.crt > example.pem
 ```
 
-Modify the `default.vcl` and `mse.conf` files according to your setup (see above). As a minimum, change the endpoint in the `vcl_init` section in `default.vcl` and provide directory and filename for the books in `mse.conf`.
+Modify the `default.vcl` and `mse.conf` files according to your setup (see above). As a minimum, change the endpoint in the `vcl_init` section in `default.vcl` and provide directory and filename for the books in `mse.conf`. Make sure that directories used in `mse.conf` are included in `docker-compose.yml`.
 
 Then run the container using `docker-compose`. You may want to use the `--build` paramater to recreate the Docker image if you changed `default.vcl` or `mse.conf`.
 
