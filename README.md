@@ -140,9 +140,9 @@ Create a RHEL/Centos yum repository file to access the Varnish Enterprise files 
 vi varnish-6.0-plus.repo
 ```
 
-Modify the default.vcl and mse.conf files according to your setup. As a minimum, change the endpoint in vcl_init in default.vcl and provide directory and filename for the books in mse.conf.
+Modify the `default.vcl` and `mse.conf` files according to your setup (see above). As a minimum, change the endpoint in the `vcl_init` section in `default.vcl` and provide directory and filename for the books in `mse.conf`.
 
-Then run the container using docker-compose. You may want to use the `--build` paramater to recreate the Docker image, if you changed default.vcl or mse.conf.
+Then run the container using `docker-compose`. You may want to use the `--build` paramater to recreate the Docker image if you changed `default.vcl` or `mse.conf`.
 
 ```
 docker-compose up --build
